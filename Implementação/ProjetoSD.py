@@ -1,3 +1,4 @@
+#! python3
 import pygame
 import col
 import time
@@ -33,7 +34,12 @@ font = pygame.font.SysFont(None,35)
 bgColor = col.white
 pixelSize = 32
 gridColor = col.lightGrey
-gridThickness = pixelSize//16
+if (pixelSize > 16):
+    gridThickness = pixelSize//16
+elif (pixelSize > 2):
+    gridThickness = 1
+else:
+    gridThickness = 0
 
 pixelGrid = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW//pixelSize)]
 #print (pixels)
@@ -41,12 +47,19 @@ pixelGrid = [[col.white for i in range(screenH//pixelSize)] for j in range(scree
 def floorToMultiple(number,multiple):
     return number - (number % multiple)
 
+def calcMessageSize():
+    #Calcula o tamanho da mensagem que contém toda a malha de pixels (+ as outras possíveis variáveis, como 'y', 'x', etc)
+    size = int(((screenW/pixelSize) * (screenH/pixelSize))*18)
+    if (size < 1024):
+        size = 1024
+    return size
+
 def getPixels():
     #Pede que o servidor envie a malha de pixels
     message = {"pixels": None,"updateRequest": 'y', "x": None, "y": None, "color": None, "sair": None}
     server.send(json.dumps(message).encode())
     #Espera a resposta do servidor e retorna a resposta correta caso não haja erro. Se ouver, retorna lista vazia
-    resposta = server.recv(16384)
+    resposta = server.recv(calcMessageSize())#16384 para 32 pixels...
     data = json.loads(resposta.decode())
     #print(data)
     if data["sair"] == 'sim' or data["sair"] == 's' or data["sair"] == 'y' or data["sair"] == 'yes':
@@ -119,12 +132,13 @@ def gameLoop():
                 pygame.draw.rect(gameDisplay, pixelGrid[i//pixelSize][j//pixelSize],[i,j,pixelSize,pixelSize])
         
         #Desenhando o grid
-        for i in range(0,screenW):#Linhas verticais...
-            if i%pixelSize == 0:
-                pygame.draw.rect(gameDisplay, col.lightGrey,[i,0,gridThickness,screenH])
-        for i in range(0,screenH):#Linhas horizontais...
-            if i%pixelSize == 0:
-                pygame.draw.rect(gameDisplay, col.lightGrey,[0,i,screenW,gridThickness])
+        if (gridThickness > 0):
+            for i in range(0,screenW):#Linhas verticais...
+                if i%pixelSize == 0:
+                    pygame.draw.rect(gameDisplay, col.lightGrey,[i,0,gridThickness,screenH])
+            for i in range(0,screenH):#Linhas horizontais...
+                if i%pixelSize == 0:
+                    pygame.draw.rect(gameDisplay, col.lightGrey,[0,i,screenW,gridThickness])
 
         #Update gráfico
         pygame.display.update()

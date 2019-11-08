@@ -1,17 +1,58 @@
-﻿import col
+﻿#! python3
+import col
 import socket
 import threading
 import json
 
-#Obs.: ambos os tamanhos da tela e variáveis de jogo devem ser consistentes entre o servidor e todos os clientes
+def floorToMultiple(number,multiple):
+    return number - (number % multiple)
 
-#Obs.: tamanho da tela tem que ser múltiplo inteiro de pixelSize
-screenW = 1024
-screenH = 768
+#Selecionando o tamanho do pixel da malha
+print("Insira o tamanho do pixel da malha (padrão = 32)")
+input_ = ''
+input_ = input()
+while (True):
+    try:
+        pixelSize = int(input_)
+        if (int(input_) > 0):
+            print("Tamanho do pixel escolhido: " + str(pixelSize))
+            break
+        else:
+            raise ValueError
+    except:
+        print("Favor inserir um valor numérico válido")
+        input_ = input()
+
+#Selecionando a largura da tela
+print("Insira a largura da tela de exibição. Será arredondado para o menor múltiplo do tamanho do pixel! (padrão = 1024)")
+input_ = input()
+while (True):
+    try:
+        screenW = floorToMultiple(int(input_),pixelSize)
+        if (screenW < pixelSize):
+            screenW = pixelSize
+        print("Largura da tela escolhida: " + str(screenW))
+        break
+    except:
+        print("Favor inserir um valor numérico válido")
+        input_ = input()
+
+#Selecionando a altura da tela
+print("Insira a altura da tela de exibição. Será arredondado para o menor múltiplo do tamanho do pixel! (padrão = 768)")
+input_ = input()
+while (True):
+    try:
+        screenH = floorToMultiple(int(input_),pixelSize)
+        if (screenH < pixelSize):
+            screenH = pixelSize
+        print("altura da tela escolhida: " + str(screenH))
+        break
+    except:
+        print("Favor inserir um valor numérico válido")
+        input_ = input()
 
 #Variáveis do jogo
 bgColor = col.white
-pixelSize = 32
 gridColor = col.lightGrey
 gridThickness = pixelSize//16
 
