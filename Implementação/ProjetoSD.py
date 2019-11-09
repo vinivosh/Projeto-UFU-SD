@@ -1,5 +1,6 @@
 #! python3
 import pygame
+import math
 import col
 import time
 import socket
@@ -9,30 +10,67 @@ import json
 #Inicializando e conectando com o servidor
 global ip, port, server
 
-ip='localhost'
-port= 8080
+while(True):
+    #Selecionando o ip
+    print("\nInsira o IP do servidor (Apenas pressione enter para deixar o valor padrão = localhost)")
+    while(True):
+        try:
+            ip = input()
+            break
+        except:
+            print("Favor inserir um valor válido!")
+    if (ip == ''):
+        ip = 'localhost'
+    print("IP inserido: " + ip + "\n")
 
-server= socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-server.connect((ip,port))
-resposta=server.recv(4096)
-resposta=server.recv(4096)
+    #Selecionando a porta
+    input_ = ''
+    print("Insira a porta do servidor (Apenas pressione enter para deixar o valor padrão = 8080)")
+    while(True):
+        try:
+            input_ = input()
+            if (input_ == ''):
+                port = 8080
+                break
+            port = int(input())
+            break
+        except:
+            print("Favor inserir um valor válido!")
+    print("Porta inserida: " + str(port) + "\n")
+
+    #Conectando ao servidor
+    server= socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    try:
+        server.connect((ip,port))
+        resposta=server.recv(4096)
+        resposta=server.recv(4096)
+        break
+    except Exception as e:
+        print("Erro ao tentar se conectar ao servidor:\n" + str(e) + "\nTente novamente.")
 
 #Inicializando o pygame
 x = pygame.init()
 print(str(x[0]) + " sucessos e " + str(x[1]) + " erros na inicialização do pygame.\n")
 
-#Obs.: tamanho da tela tem que ser múltiplo inteiro de pixelSize
-screenW = 1024
-screenH = 768
+#Obtendo informações do servidor...
+message = {"pixels": None,"updateRequest": None, "infoRequest": 'y', "x": None, "y": None, "color": None, "sair": None}
+server.send(json.dumps(message).encode())
+#Espera a resposta do servidor e retorna a resposta correta caso não haja erro. Se ouver, retorna lista vazia
+resposta = server.recv(4096)
+data = json.loads(resposta.decode())
+pixelSize = data["pixels"]
+screenW = data["x"]
+screenH = data["y"]
+
+#Setup do display
 gameDisplay = pygame.display.set_mode((screenW,screenH))
-pygame.display.set_caption('Pixels')
+pygame.display.set_caption('pixClone')
 
 #Fonte do jogo inteiro
 font = pygame.font.SysFont(None,35)
 
 #Variáveis do jogo
 bgColor = col.white
-pixelSize = 32
 gridColor = col.lightGrey
 if (pixelSize > 16):
     gridThickness = pixelSize//16
@@ -42,39 +80,33 @@ else:
     gridThickness = 0
 
 pixelGrid = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW//pixelSize)]
-#print (pixels)
 
 def floorToMultiple(number,multiple):
     return number - (number % multiple)
 
 def calcMessageSize():
     #Calcula o tamanho da mensagem que contém toda a malha de pixels (+ as outras possíveis variáveis, como 'y', 'x', etc)
-    size = int(((screenW/pixelSize) * (screenH/pixelSize))*18)
-    if (size < 1024):
-        size = 1024
+    size = math.ceil(((screenW/pixelSize) * (screenH/pixelSize))*18)
+    if (size < 2048):
+        size = 2048
     return size
 
 def getPixels():
     #Pede que o servidor envie a malha de pixels
-    message = {"pixels": None,"updateRequest": 'y', "x": None, "y": None, "color": None, "sair": None}
+    message = {"pixels": None,"updateRequest": 'y', "infoRequest": None, "x": None, "y": None, "color": None, "sair": None}
     server.send(json.dumps(message).encode())
     #Espera a resposta do servidor e retorna a resposta correta caso não haja erro. Se ouver, retorna lista vazia
-    resposta = server.recv(calcMessageSize())#16384 para 32 pixels...
+    resposta = server.recv(calcMessageSize())
     data = json.loads(resposta.decode())
-    #print(data)
     if data["sair"] == 'sim' or data["sair"] == 's' or data["sair"] == 'y' or data["sair"] == 'yes':
         return []
     if data["pixels"] == None:
         return []
-    #return pixels
     return data["pixels"]
 
 def setPixel(x,y,value):
-    message = {"pixels": None,"updateRequest": None, "x": x, "y": y, "color": value, "sair": None}
-    #print(json.dumps(message).encode())
+    message = {"pixels": None,"updateRequest": None, "infoRequest": None, "x": x, "y": y, "color": value, "sair": None}
     server.send(json.dumps(message).encode())
-
-    #pixels[x][y] = value
 
 def messageToScreen(msg,color,x,y):
     screenText = font.render(msg,True,color)
@@ -94,16 +126,10 @@ def gameLoop():
         i = 0        
         for l1 in pixelGridTemp:
             j = 0
-            #print(i)
             for l2 in pixelGridTemp[i]:
-                #print(j)
                 pixelGrid[i][j] = (pixelGridTemp[i][j][0], pixelGridTemp[i][j][1], pixelGridTemp[i][j][2])
                 j += 1
             i += 1
-
-        #print(pixelGrid)
-
-        #pixelGrid = getPixels()
 
         #Loop de eventos
         for event in pygame.event.get():
@@ -145,7 +171,7 @@ def gameLoop():
         clock.tick(fps)
 
     #Informa ao servidor que deseja sair
-    message = {"pixels": None,"updateRequest": None, "x": None, "y": None, "color": None, "sair": 'y'}
+    message = {"pixels": None,"updateRequest": None, "infoRequest": None, "x": None, "y": None, "color": None, "sair": 'y'}
     server.send(json.dumps(message).encode())
     pygame.quit()
 
