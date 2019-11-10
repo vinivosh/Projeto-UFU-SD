@@ -3,11 +3,21 @@ import col
 import socket
 import threading
 import json
+import math
 
 def floorToMultiple(number,multiple):
     return number - (number % multiple)
 
-global pixelSize, screenW, screenH
+global pixelSize
+global screenW
+global screenH
+global timesMod
+
+#Tentando ler snapshot salvo
+try:
+    dataFile = open("snapshot.pixc","r")
+except OSError as e:
+    pass
 
 #Selecionando o tamanho do pixel da malha
 print("Insira o tamanho do pixel da malha (Apenas pressione enter para inserir o valor padrão = 32)")
@@ -69,6 +79,12 @@ while (True):
 global pixels
 pixels = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW//pixelSize)]
 
+#Salvando informações em arquivo
+dados = {"pixelSize": pixelSize, "screenW": screenW, "screenH": screenH, "pixels": None}
+dataFile = open("snapshot.pixc", 'w', encoding="utf-8")
+dataFile.write(json.dumps(dados, skipkeys=True))
+dataFile.close()
+
 while(True):
     #Selecionando o ip
     print("Insira o IP para este servidor (Apenas pressione enter para deixar o valor padrão = localhost)")
@@ -127,6 +143,28 @@ print ('[*] Escutando %s:%d' %(ip,port))
 #                data = json.dumps({"pixels": pixels,"updateRequest": None, "x": None, "y": None, "color": None, "sair": None})
 #                x.send(data.encode())
 
+#Função que salva as modificações num log. Quando o limite do log for ultrapassado, aplica todas modificações documentadas para o snapshot, e prossegue com o logging
+def log(x=0, y=0, color=col.white):
+    global timesMod
+    #Se não atingimos o limite de ações em log (determinado como a quantidade de pixels na malha divido por 32 e arredondado para baixo)...
+    if (timesMod < math.floor(screenH//pixelSize * screenW//pixelSize / 32)-1):
+        if (timesMod == 0):
+            logFile = open("log.pixc", 'w', encoding="utf-8")
+        else:
+            logFile = open("log.pixc", 'a', encoding="utf-8")        
+        logFile.write(str(x) + " " + str(y) + " " + str(color[0]) + " " + str(color[1]) + " " + str(color[2]) + "  ")
+        logFile.close()
+        timesMod += 1
+    else:#Quando a modificação de número máximo de timesMod for ser feita, ela não será logada, mas sim passada pro snapshot
+        dados = {"pixelSize": pixelSize, "screenW": screenW, "screenH": screenH, "pixels": pixels}
+        dataFile = open("snapshot.pixc", 'w', encoding="utf-8")
+        dataFile.write(json.dumps(dados, skipkeys=True))
+        dataFile.close()
+        logFile = open("log.pixc", 'w', encoding="utf-8")
+        logFile.write("")
+        logFile.close()
+        timesMod = 0
+
 def handle_client(client_socket):
     print ('\n-------------------\n')
     client_socket.send(('\nMensagem destinada ao cliente: %s \n' %addr[0]).encode())
@@ -152,8 +190,10 @@ def handle_client(client_socket):
         #Lidando com modificação na malha
         elif resposta["x"] != None and resposta["y"] != None and resposta["color"] != None:
             pixels[resposta["x"]][resposta["y"]] = resposta["color"]
+            log(resposta["x"], resposta["y"], resposta["color"])
 
 clientes=[]
+timesMod = 0
 
 while True:
     client, addr = server.accept()
