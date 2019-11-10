@@ -60,7 +60,7 @@ while (True):
         screenH = floorToMultiple(int(input_),pixelSize)
         if (screenH < pixelSize):
             screenH = pixelSize
-        print("Altura da tela escolhida: " + str(screenH))
+        print("Altura da tela escolhida: " + str(screenH) + "\n")
         break
     except:
         print("Favor inserir um valor numérico válido")
@@ -69,6 +69,56 @@ while (True):
 global pixels
 pixels = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW//pixelSize)]
 
+while(True):
+    #Selecionando o ip
+    print("Insira o IP para este servidor (Apenas pressione enter para deixar o valor padrão = localhost)")
+    while(True):
+        try:
+            ip = input()
+            break
+        except:
+            print("Favor inserir um valor válido!")
+    if (ip == ''):
+        ip = 'localhost'
+    print("IP inserido: " + ip + "\n")
+
+    #Selecionando a porta
+    input_ = ''
+    print("Insira a porta para este servidor (Apenas pressione enter para deixar o valor padrão = 8080)")
+    while(True):
+        try:         
+            input_ = input()
+            if (input_ == ""):
+                port = 8080
+                break
+            port = int(input_)
+            if (port < 0):
+                raise ValueError
+            break
+        except:
+            print("Favor inserir um valor válido!")
+    print("Porta inserida: " + str(port) + "\n")
+
+    #ip='localhost'
+    #port= 8080
+
+    try:
+        server= socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    except socket.error as e:
+        print("Erro ao estabelecer a conexão:\n" + str(e) + "\nTente novamente...\n")
+        continue
+    try:
+        server.bind((ip,port))
+    except socket.error as e:
+        print("Erro ao estabelecer a conexão:\n" + str(e) + "\nTente novamente...\n")
+        continue
+    server.listen(5)
+    break
+    #client_envia= threading.Thread(target=envia, args=(clientes,))
+    #client_envia.start()
+
+print ('[*] Escutando %s:%d' %(ip,port))
+
 #def envia(lista_clientes):
 #    while True:
 #
@@ -76,18 +126,6 @@ pixels = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW/
 #            for x in lista_clientes:
 #                data = json.dumps({"pixels": pixels,"updateRequest": None, "x": None, "y": None, "color": None, "sair": None})
 #                x.send(data.encode())
-
-
-ip='localhost'
-port= 8080
-clientes=[]
-server= socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-server.bind((ip,port))
-server.listen(5)
-#client_envia= threading.Thread(target=envia, args=(clientes,))
-#client_envia.start()
-
-print ('[*] Escutando %s:%d' %(ip,port))
 
 def handle_client(client_socket):
     print ('\n-------------------\n')
@@ -115,10 +153,11 @@ def handle_client(client_socket):
         elif resposta["x"] != None and resposta["y"] != None and resposta["color"] != None:
             pixels[resposta["x"]][resposta["y"]] = resposta["color"]
 
+clientes=[]
+
 while True:
     client, addr = server.accept()
     clientes.append(client)
     print ('[*] Conexao aceita de %s:%d' %(addr[0],addr[1]))
     client_handler= threading.Thread(target=handle_client, args=(client,))
     client_handler.start()
-

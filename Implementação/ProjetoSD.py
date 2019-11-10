@@ -27,12 +27,14 @@ while(True):
     input_ = ''
     print("Insira a porta do servidor (Apenas pressione enter para deixar o valor padrão = 8080)")
     while(True):
-        try:
+        try:            
             input_ = input()
             if (input_ == ''):
                 port = 8080
                 break
-            port = int(input())
+            port = int(input_)
+            if (port < 0):
+                raise ValueError
             break
         except:
             print("Favor inserir um valor válido!")
