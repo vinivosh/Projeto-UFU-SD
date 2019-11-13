@@ -4,8 +4,12 @@ import math
 import col
 import time
 import socket
-#import threading
 import json
+
+import grpc
+import pixClone_pb2
+import pixClone_pb2_grpc
+#from __future__ import print_function
 
 #Inicializando e conectando com o servidor
 global ip, port, server
@@ -39,13 +43,18 @@ while(True):
         except:
             print("Favor inserir um valor válido!")
     print("Porta inserida: " + str(port) + "\n")
-
+    
     #Conectando ao servidor
-    server= socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     try:
-        server.connect((ip,port))
-        resposta=server.recv(4096)
-        resposta=server.recv(4096)
+        channel = grpc.insecure_channel(ip + ":" + str(port))
+        stub = pixClone_pb2_grpc.pixCloneStub(channel)
+
+        #Obtendo informações do servidor...
+        info = stub.InfoRequest(pixClone_pb2.Nothing())
+        pixelSize = info.pSize
+        screenW = info.screenWidth
+        screenH = info.screenHeight
+        #print("[DEBUG] pixelSize="+str(pixelSize)+"\nscreenW="+str(screenW)+"\nscreenH="+str(screenH))
         break
     except Exception as e:
         print("Erro ao tentar se conectar ao servidor:\n" + str(e) + "\nTente novamente.")
@@ -53,16 +62,6 @@ while(True):
 #Inicializando o pygame
 x = pygame.init()
 print(str(x[0]) + " sucessos e " + str(x[1]) + " erros na inicialização do pygame.\n")
-
-#Obtendo informações do servidor...
-message = {"pixels": None,"updateRequest": None, "infoRequest": 'y', "x": None, "y": None, "color": None, "sair": None}
-server.send(json.dumps(message).encode())
-#Espera a resposta do servidor e retorna a resposta correta caso não haja erro. Se ouver, retorna lista vazia
-resposta = server.recv(4096)
-data = json.loads(resposta.decode())
-pixelSize = data["pixels"]
-screenW = data["x"]
-screenH = data["y"]
 
 #Setup do display
 gameDisplay = pygame.display.set_mode((screenW,screenH))
@@ -81,57 +80,38 @@ elif (pixelSize > 2):
 else:
     gridThickness = 0
 
+global pixelGrid
 pixelGrid = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW//pixelSize)]
 
 def floorToMultiple(number,multiple):
     return number - (number % multiple)
 
-def calcMessageSize():
-    #Calcula o tamanho da mensagem que contém toda a malha de pixels (+ as outras possíveis variáveis, como 'y', 'x', etc)
-    size = math.ceil(((screenW/pixelSize) * (screenH/pixelSize))*18)
-    if (size < 2048):
-        size = 2048
-    return size
+def getPixels(stub):    
+    #Pede ao servidor a malha de pixels e modifica a variável global
+    global pixelGrid
+    for pixel in stub.UpdateRequest(pixClone_pb2.Nothing()):
+        pixelGrid[pixel.x][pixel.y] = (pixel.r, pixel.g, pixel.b)
 
-def getPixels():
-    #Pede que o servidor envie a malha de pixels
-    message = {"pixels": None,"updateRequest": 'y', "infoRequest": None, "x": None, "y": None, "color": None, "sair": None}
-    server.send(json.dumps(message).encode())
-    #Espera a resposta do servidor e retorna a resposta correta caso não haja erro. Se ouver, retorna lista vazia
-    resposta = server.recv(calcMessageSize())
-    data = json.loads(resposta.decode())
-    if data["sair"] == 'sim' or data["sair"] == 's' or data["sair"] == 'y' or data["sair"] == 'yes':
-        return []
-    if data["pixels"] == None:
-        return []
-    return data["pixels"]
-
-def setPixel(x,y,value):
-    message = {"pixels": None,"updateRequest": None, "infoRequest": None, "x": x, "y": y, "color": value, "sair": None}
-    server.send(json.dumps(message).encode())
+def setPixel(stub,xCoor,yCoor,value): 
+    stub.modPixels(pixClone_pb2.Pixel(x=xCoor, y=yCoor, r=value[0], g=value[1], b=value[2]))
 
 def messageToScreen(msg,color,x,y):
     screenText = font.render(msg,True,color)
     gameDisplay.blit(screenText, [x, y])
     pygame.display.update()
 
-def gameLoop():
+def gameLoop(stub):
+    global pixelGrid
+
     gameExit = False
 
     clock = pygame.time.Clock()
-    fps = 60
+    fps = 24
 
     #Loop do jogo
     while not gameExit:
-        pixelGridTemp = getPixels()#Obtendo a malha de pixels atual...
-        #Convertendo as listas internas de volta para tuplas...
-        i = 0        
-        for l1 in pixelGridTemp:
-            j = 0
-            for l2 in pixelGridTemp[i]:
-                pixelGrid[i][j] = (pixelGridTemp[i][j][0], pixelGridTemp[i][j][1], pixelGridTemp[i][j][2])
-                j += 1
-            i += 1
+        #Obtendo a malha de pixels atual...
+        getPixels(stub)
 
         #Loop de eventos
         for event in pygame.event.get():
@@ -145,9 +125,9 @@ def gameLoop():
                 pixY = floorToMultiple(pygame.mouse.get_pos()[1],pixelSize)//pixelSize
                 if event.button == pygame.BUTTON_LEFT:                    
                     if pixelGrid[pixX][pixY] == col.white:
-                        setPixel(pixX,pixY,col.black)
+                        setPixel(stub, pixX, pixY, col.black)
                     elif pixelGrid[pixX][pixY] == col.black:
-                        setPixel(pixX,pixY,col.white)
+                        setPixel(stub, pixX, pixY, col.white)
             elif event.type == pygame.QUIT:
                 gameExit = True
 
@@ -172,10 +152,8 @@ def gameLoop():
         pygame.display.update()
         clock.tick(fps)
 
-    #Informa ao servidor que deseja sair
-    message = {"pixels": None,"updateRequest": None, "infoRequest": None, "x": None, "y": None, "color": None, "sair": 'y'}
-    server.send(json.dumps(message).encode())
+    #Informa ao servidor que deseja sair [a implementar]    
     pygame.quit()
 
 #Iniciando o loop do jogo
-gameLoop()
+gameLoop(stub)

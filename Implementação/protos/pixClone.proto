@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+service pixClone {
+	//Pedido de desconexão
+	rpc Disconnect(Nothing) returns (Nothing){}
+	//Pedido de informação
+	rpc InfoRequest(Nothing) returns (Info){}
+	//Pedido da malha de pixels
+	rpc UpdateRequest(Nothing) returns (stream Pixel) {}
+	//Modificação da malha de pixels
+	rpc modPixels(Pixel) returns (Nothing){}
+}
+
+//Informação do servidor
+message Nothing {
+	
+}
+
+//Informação do servidor
+message Info {
+	int32 pSize = 1;
+	int32 screenWidth = 2;
+	int32 screenHeight = 3;
+}
+
+//Cores individuais de um pixel e suas coordenadas
+message Pixel {
+	int32 x = 1;
+	int32 y = 2;
+	int32 r = 3;
+	int32 g = 4;
+	int32 b = 5;
+}

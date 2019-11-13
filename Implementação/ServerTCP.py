@@ -4,6 +4,10 @@ import socket
 import threading
 import json
 import math
+from concurrent import futures
+import grpc
+import pixClone_pb2
+import pixClone_pb2_grpc
 
 def floorToMultiple(number,multiple):
     return number - (number % multiple)
@@ -13,6 +17,38 @@ global screenW
 global screenH
 global timesMod
 global pixels
+
+class PixCloneServicer(pixClone_pb2_grpc.pixCloneServicer):
+    #Próvém funções que implementam as funcionalidades do server
+
+    def Disconnect(self, request, context):
+        #Disconectar do servidor...
+        return pixClone_pb2.Nothing()
+
+    def InfoRequest(self, request, context):
+        global pixelSize
+        global screenW
+        global screenH
+        return pixClone_pb2.Info(pSize=pixelSize, screenWidth=screenW, screenHeight=screenH)
+
+    def UpdateRequest(self, request, context):
+        global pixelSize
+        global screenW
+        global screenH
+        global pixels
+        #print("[DEBUG] screenH / pixelSize="+str(screenH//pixelSize)+" screenW / pixelSize=" + str(screenW//pixelSize))
+        for i in range ((screenW//pixelSize)):
+            for j in range ((screenH//pixelSize)):
+                #print("[DEBUG] i=" + str(i) + " j=" + str(j))
+                #print("[DEBUG] Resposta: x=" + str(i) + " y=" + str(j) + " r=" + str(pixels[i][j][0]) + " g=" + str(pixels[i][j][1]) + " b=" + str(pixels[i][j][2]))
+                yield pixClone_pb2.Pixel(x=i, y=j, r=pixels[i][j][0], g=pixels[i][j][1], b=pixels[i][j][2])
+    
+    def modPixels(self, request, context):
+        global pixels
+        #print("[DEBUG] x=" + str(request.x) + " y=" + str(request.y) + " r=" + str(request.r) + " g=" + str(request.g) + " b=" + str(request.b))
+        pixels[request.x][request.y] = (request.r, request.g, request.b)
+        log(request.x, request.y, (request.r, request.g, request.b))
+        return pixClone_pb2.Nothing()
 
 #Função que salva as modificações num log. Quando o limite do log for ultrapassado, aplica todas modificações documentadas para o snapshot, e prossegue com o logging
 def log(x=0, y=0, color=col.white):
@@ -182,21 +218,9 @@ else:#Se estivermos utilizando o arquivo snapshot...
 
     else:#Se não houver uma malha de pixels salva...
         pixels = [[col.white for i in range(screenH//pixelSize)] for j in range(screenW//pixelSize)]
+        logRead()
 
-while(True):
-    #Selecionando o ip
-    print("Insira o IP para este servidor (Apenas pressione enter para deixar o valor padrão = localhost)")
-    while(True):
-        try:
-            ip = input()
-            break
-        except:
-            print("Favor inserir um valor válido!")
-    if (ip == ''):
-        ip = 'localhost'
-    print("IP inserido: " + ip + "\n")
-
-    #Selecionando a porta
+while(True):  
     input_ = ''
     print("Insira a porta para este servidor (Apenas pressione enter para deixar o valor padrão = 8080)")
     while(True):
@@ -213,67 +237,23 @@ while(True):
             print("Favor inserir um valor válido!")
     print("Porta inserida: " + str(port) + "\n")
 
-    #ip='localhost'
-    #port= 8080
-
     try:
-        server= socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    except socket.error as e:
-        print("Erro ao estabelecer a conexão:\n" + str(e) + "\nTente novamente...\n")
-        continue
-    try:
-        server.bind((ip,port))
-    except socket.error as e:
-        print("Erro ao estabelecer a conexão:\n" + str(e) + "\nTente novamente...\n")
-        continue
-    server.listen(5)
-    break
-    #client_envia= threading.Thread(target=envia, args=(clientes,))
-    #client_envia.start()
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        pixClone_pb2_grpc.add_pixCloneServicer_to_server(PixCloneServicer(), server)
+        server.add_insecure_port("[::]:" + str(port))
+        break
+    except Exception as e:
+        print("Erro no estabelecimento do servidor:\n" + str(e) + "\nTente novamente...\n")
 
-print ('[*] Escutando %s:%d' %(ip,port))
-
-#def envia(lista_clientes):
-#    while True:
-#
-#        if len(lista_clientes)!=0:
-#            for x in lista_clientes:
-#                data = json.dumps({"pixels": pixels,"updateRequest": None, "x": None, "y": None, "color": None, "sair": None})
-#                x.send(data.encode())
-
-def handle_client(client_socket):
-    print ('\n-------------------\n')
-    client_socket.send(('\nMensagem destinada ao cliente: %s \n' %addr[0]).encode())
-    client_socket.send('\nACK!\nRecebido pelo servidor\n'.encode())
-    while True :
-        resposta=client_socket.recv(4096)
-        resposta = json.loads(resposta.decode())
-        #Lidando com pedido de saída
-        if (resposta["sair"] != None) and (resposta["sair"] == 's' or resposta["sair"] =='sim' or resposta["sair"] =='y' or resposta["sair"] =='yes'):
-            client_socket.send(json.dumps({"pixels": None,"updateRequest": None, "infoRequest": None, "x": None, "y": None, "color": None, "sair": 'y'}).encode())
-            client_socket.close()
-            print ('[*] Conexao de fechada\n:')
-            clientes.remove(client_socket)
-            break
-        #Lidando com pedido de informação
-        elif (resposta["infoRequest"] != None) and (resposta["infoRequest"] == 's' or resposta["infoRequest"] == 'sim' or resposta["infoRequest"] == 'y' or resposta["infoRequest"] == 'yes'):
-            resp = json.dumps({"pixels": pixelSize,"updateRequest": None, "infoRequest": None, "x": screenW, "y": screenH, "color": None, "sair": 'n'}).encode()
-            client_socket.send(resp)
-        #Lidando com pedido de update da malha
-        elif (resposta["updateRequest"] != None) and (resposta["updateRequest"] == 's' or resposta["updateRequest"] == 'sim' or resposta["updateRequest"] == 'y' or resposta["updateRequest"] == 'yes'):
-            resp = json.dumps({"pixels": pixels,"updateRequest": None, "infoRequest": None, "x": None, "y": None, "color": None, "sair": 'n'}).encode()
-            client_socket.send(resp)
-        #Lidando com modificação na malha
-        elif resposta["x"] != None and resposta["y"] != None and resposta["color"] != None:
-            pixels[resposta["x"]][resposta["y"]] = resposta["color"]
-            log(resposta["x"], resposta["y"], resposta["color"])
-
-clientes=[]
 timesMod = 0
 
-while True:
-    client, addr = server.accept()
-    clientes.append(client)
-    print ('[*] Conexao aceita de %s:%d' %(addr[0],addr[1]))
-    client_handler= threading.Thread(target=handle_client, args=(client,))
-    client_handler.start()
+server.start()
+#server.wait_for_termination()
+
+input_ = ''
+while(input_ != 'sair'):
+    print("Insira \"sair\" sem as aspas para sair...\n")
+    input_ = input()
+    print("\n")
+print("Fechando servidor...")
+server.stop(0)
